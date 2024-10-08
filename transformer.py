@@ -46,6 +46,7 @@ class EncoderLayer(nn.Module):
 
 # t_mask:下三角掩码，对未来信息的掩码，即因果掩码
 # s_mask:对padding的掩码，padding的作用是统一句子的长度
+# encoder-decoder
 class DecoderLayer(nn.Module):
     def __init__(self, d_model, ffn_hidden, n_head, drop_prob):
         super().__init__()
@@ -85,9 +86,9 @@ class DecoderLayer(nn.Module):
 class Encoder(nn.Module):
     def __init__(
             self, enc_voc_size, max_len, d_model,
-            ffn_hidden, n_head, n_layer, drop_prob, device):
+            ffn_hidden, n_head, n_layer, drop_prob, pad, device):
         super().__init__()
-        self.embedding = TransformerEmbedding(enc_voc_size, d_model, max_len, 1, drop_prob, device)
+        self.embedding = TransformerEmbedding(enc_voc_size, d_model, max_len, pad, drop_prob, device)
         self.layers = nn.ModuleList(
             [
                 EncoderLayer(d_model, ffn_hidden, n_head, drop_prob)
@@ -104,9 +105,9 @@ class Encoder(nn.Module):
 class Decoder(nn.Module):
     def __init__(
             self, dec_voc_size, max_len, d_model,
-            ffn_hidden, n_head, n_layer, drop_prob, device):
+            ffn_hidden, n_head, n_layer, drop_prob, pad, device):
         super().__init__()
-        self.embedding = TransformerEmbedding(dec_voc_size, d_model, max_len, 1, drop_prob, device)
+        self.embedding = TransformerEmbedding(dec_voc_size, d_model, max_len, pad, drop_prob, device)
         self.layers = nn.ModuleList(
             [
                 DecoderLayer(d_model, ffn_hidden, n_head, drop_prob)
@@ -126,10 +127,10 @@ class Decoder(nn.Module):
 
 class Transformer(nn.Module):
     def __init__(self, src_pad_idx, trg_pad_idx, enc_voc_size, dec_voc_size,
-                 max_len, d_model, n_heads, ffn_hidden, n_layers, drop_prob, device):
+                 max_len, d_model, n_heads, ffn_hidden, n_layers, drop_prob, pad, device):
         super().__init__()
-        self.encoder = Encoder(enc_voc_size, max_len, d_model, ffn_hidden, n_heads, n_layers, drop_prob, device)
-        self.decoder = Decoder(dec_voc_size, max_len, d_model, ffn_hidden, n_heads, n_layers, drop_prob, device)
+        self.encoder = Encoder(enc_voc_size, max_len, d_model, ffn_hidden, n_heads, n_layers, drop_prob, pad, device)
+        self.decoder = Decoder(dec_voc_size, max_len, d_model, ffn_hidden, n_heads, n_layers, drop_prob, pad, device)
 
         self.src_pad_idx = src_pad_idx
         self.trg_pad_idx = trg_pad_idx
