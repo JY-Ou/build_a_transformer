@@ -60,23 +60,59 @@ class MultiHeadAttention(nn.Module):
 
 # GQA
 class GroupQueryAttention(nn.Module):
-
-    def __init__(self, d_model, n_head, n_group):
-        super().__init__()
-        assert d_model % n_head == 0
-        self.head_dim = d_model // n_head
-        self.n_head = n_head
-        self.n_group = n_group
-        self.n_head_group = n_head
-
+    def __init__(self, d_model, n_heads, n_groups):
+        super(GroupQueryAttention, self).__init__()
         self.d_model = d_model
-        self.W_q = nn.Linear(d_model, d_model, bias=False)
-        self.W_k = nn.Linear(d_model, d_model, bias=False)
-        self.W_v = nn.Linear(d_model, d_model, bias=False)
+        self.n_heads = n_heads
+        self.n_groups = n_groups
+
+        assert d_model % n_heads == 0
+        # 每组处理多少head
+        self.n_heads_groups = self.n_heads // self.n_groups
+        self.head_dim = d_model // n_heads
+
+        self.w_q = nn.Linear(d_model, d_model)
+        self.w_k = nn.Linear(d_model, self.n_groups * self.head_dim)
+        self.w_v = nn.Linear(d_model, self.n_groups * self.head_dim)
         self.w_combine = nn.Linear(d_model, d_model)
+        self.softmax = nn.Softmax(dim=-1)
+
+    def expand(self, data):
+        # shape: b, n_groups, num_tokens, head_dim
+        batch, time = data.shape[0], data.shape[2]
+        # shape: b, n_groups, n_heads_groups, num_tokens, head_dim
+        data = data[:, :, None, :, :].expand(batch, self.n_groups, self.n_heads_groups, time,
+                                             self.head_dim).contiguous()
+        # shape: b, n_groups * n_heads_groups, num_tokens, head_dim = b, n_heads, num_tokens, head_dim
+        return data.view(batch, self.n_groups * self.n_heads_groups, time, self.head_dim)
 
     def forward(self, q, k, v, mask=None):
-        return
+        # shape: b, num_tokens, d_model
+        q = self.w_q(q)
+        # shape: b, num_tokens, n_groups * head_dim
+        k = self.w_k(k)
+        v = self.w_v(v)
+
+        # shape: b, num_tokens, d_model
+        batch = q.shape[0]
+        # shape: b, n_groups * n_heads_groups, num_tokens, head_dim = b, n_heads, num_tokens, head_dim
+        q = q.view(batch, -1, self.n_groups * self.n_heads_groups, self.head_dim).permute(0, 2, 1, 3)
+        # shape: b, n_groups, num_tokens, head_dim
+        k = k.view(batch, -1, self.n_groups, self.head_dim).permute(0, 2, 1, 3)
+        v = v.view(batch, -1, self.n_groups, self.head_dim).permute(0, 2, 1, 3)
+
+        # 升维,将KV矩阵变回与Q同一维度 b, n_heads, num_tokens, head_dim
+        k = self.expand(k)
+        v = self.expand(v)
+        # score.shape = b, n_heads, num_tokens, num_tokens
+        score = q @ k.transpose(2, 3) / math.sqrt(self.head_dim)
+        if mask is not None:
+            score = score.masked_fill(mask == 0, -1e9)
+        # score.shape = b, n_heads, num_tokens, head_dim
+        score = self.softmax(score) @ v
+        score = score.permute(0, 2, 1, 3).contiguous().view(batch, -1, self.d_model)
+        output = self.w_combine(score)
+        return output
 
 
 
