@@ -7,7 +7,7 @@ original:
     <img src="image/20240720150157.png" width="400"/>
 <p>
 
-## 改进介绍
+## 主流Transformer改进介绍
 
 目前主流Transformer模型架构
 - 模型里基本`无bias`，但Qwen中使用bias
